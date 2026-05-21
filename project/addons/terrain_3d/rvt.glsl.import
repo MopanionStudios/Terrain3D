@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://bichuo6hwfx14"
+path="res://.godot/imported/rvt.glsl-830107d9cc775d988a567258c76a826d.res"
+
+[deps]
+
+source_file="res://addons/terrain_3d/rvt.glsl"
+dest_files=["res://.godot/imported/rvt.glsl-830107d9cc775d988a567258c76a826d.res"]
+
+[params]
+
