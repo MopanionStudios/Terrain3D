@@ -1,76 +1,22 @@
 [gd_resource type="Terrain3DMaterial" format=3 uid="uid://ccvn15t8km0ft"]
 
-[ext_resource type="Shader" uid="uid://0vr3ntauc6wl" path="res://rvt_terrain.gdshader" id="1_bqowf"]
-
-[sub_resource type="Gradient" id="Gradient_bqowf"]
-offsets = PackedFloat32Array(0.2, 1)
-colors = PackedColorArray(1, 1, 1, 1, 0, 0, 0, 1)
-
-[sub_resource type="FastNoiseLite" id="FastNoiseLite_hxs0i"]
-noise_type = 2
-frequency = 0.03
-cellular_jitter = 3.0
-cellular_return_type = 0
-domain_warp_enabled = true
-domain_warp_type = 1
-domain_warp_amplitude = 50.0
-domain_warp_fractal_type = 2
-domain_warp_fractal_lacunarity = 1.5
-domain_warp_fractal_gain = 1.0
-
-[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_0hg6v"]
-noise = SubResource("FastNoiseLite_hxs0i")
-color_ramp = SubResource("Gradient_bqowf")
-seamless = true
+[ext_resource type="Shader" uid="uid://vmy6duwngfkt" path="res://new_rvt.gdshader" id="1_bqowf"]
 
 [resource]
 _shader_parameters = {
-&"auto_base_texture": null,
-&"auto_height_reduction": null,
-&"auto_overlay_texture": null,
-&"auto_slope": null,
-&"bias_distance": null,
+&"bias_distance": 512.0,
 &"blend_sharpness": 0.5,
-&"depth_blur": null,
-&"distant_normal_scale": null,
-&"dual_scale_far": null,
-&"dual_scale_near": null,
-&"dual_scale_reduction": null,
-&"dual_scale_texture": null,
-&"flat_terrain_normals": null,
+&"depth_blur": 0.0,
+&"distant_normal_scale": 2.0,
+&"flat_terrain_normals": false,
 &"ground_level": -20.0,
-&"macro_variation1": null,
-&"macro_variation2": null,
-&"macro_variation_slope": null,
-&"mipmap_bias": null,
-&"noise1_angle": null,
-&"noise1_offset": null,
-&"noise1_scale": null,
-&"noise2_scale": null,
-&"noise_texture": SubResource("NoiseTexture2D_0hg6v"),
+&"mipmap_bias": 1.0,
 &"region_blend": 0.25,
 &"rvt_albedo": null,
 &"shader_uniforms": null,
-&"shader_uniforms::auto_shader": null,
-&"shader_uniforms::displacement": null,
-&"shader_uniforms::dual_scaling": null,
 &"shader_uniforms::general": null,
-&"shader_uniforms::macro_variation": null,
-&"shader_uniforms::mipmaps": null,
-&"shader_uniforms::world_background_noise": null,
-&"tri_scale_reduction": null,
-&"world_noise_fragment_normals": null,
-&"world_noise_height": null,
-&"world_noise_lod_distance": null,
-&"world_noise_max_octaves": null,
-&"world_noise_min_octaves": null,
-&"world_noise_offset": null,
-&"world_noise_scale": null
+&"shader_uniforms::mipmaps": null
 }
-world_background = 2
-dual_scaling_enabled = true
-macro_variation_enabled = true
-projection_enabled = true
 shader_override_enabled = true
 shader_override = ExtResource("1_bqowf")
 displacement_sharpness = 0.25

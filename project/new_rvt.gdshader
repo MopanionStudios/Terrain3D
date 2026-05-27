@@ -70,43 +70,12 @@ group_uniforms;
 
 // Public uniforms
 group_uniforms shader_uniforms.general;
+uniform highp sampler2DArray rvt_albedo : source_color, FILTER_METHOD;
 uniform float ground_level : hint_range(-1000., 1000.) = -20.0;
 uniform float region_blend : hint_range(.001, 1., 0.001) = 0.25;
-uniform highp sampler2DArray rvt_albedo : repeat_disable;
 
 uniform bool flat_terrain_normals = false;
 uniform float blend_sharpness : hint_range(0, 1) = 0.5;
-group_uniforms;
-
-#define AUTO_SHADER
-group_uniforms shader_uniforms.auto_shader;
-uniform float auto_slope : hint_range(0, 10) = 1.0;
-uniform float auto_height_reduction : hint_range(0, 1) = 0.1;
-uniform int auto_base_texture : hint_range(0, 31) = 0;
-uniform int auto_overlay_texture : hint_range(0, 31) = 1;
-group_uniforms;
-
-#define DISPLACEMENT
-uniform float _displacement_scale : hint_range(0.0, 2.0, 0.01) = 1.0;
-uniform highp sampler2D _displacement_buffer : repeat_disable, filter_linear;
-
-group_uniforms shader_uniforms.dual_scaling;
-uniform int dual_scale_texture : hint_range(0,31) = 0;
-uniform float dual_scale_reduction : hint_range(0.001,1) = 0.3;
-uniform float tri_scale_reduction : hint_range(0.001,1) = 0.3;
-uniform float dual_scale_far : hint_range(0,1000) = 170.0;
-uniform float dual_scale_near : hint_range(0,1000) = 100.0;
-group_uniforms;
-
-group_uniforms shader_uniforms.macro_variation;
-uniform vec3 macro_variation1 : source_color = vec3(1.);
-uniform vec3 macro_variation2 : source_color = vec3(1.);
-uniform float macro_variation_slope : hint_range(0., 1.)  = 0.333;
-uniform highp sampler2D noise_texture : source_color, FILTER_METHOD, repeat_enable;
-uniform float noise1_scale : hint_range(0.001, 1.) = 0.04; // Used for macro variation 1. Scaled up 10x
-uniform float noise1_angle : hint_range(0, 6.283) = 0.;
-uniform vec2 noise1_offset = vec2(0.5);
-uniform float noise2_scale : hint_range(0.001, 1.) = 0.076;	// Used for macro variation 2. Scaled up 10x
 group_uniforms;
 
 
@@ -116,17 +85,6 @@ uniform float mipmap_bias : hint_range(0.5, 1.5, 0.01) = 1.0;
 uniform float distant_normal_scale : hint_range(1.0, 10.0, 0.1) = 2.0;
 uniform float depth_blur : hint_range(0.0, 35.0, 0.1) = 0.0;
 group_uniforms;
-
-group_uniforms shader_uniforms.world_background_noise;
-uniform bool world_noise_fragment_normals = false;
-uniform int world_noise_max_octaves : hint_range(0, 15) = 4;
-uniform int world_noise_min_octaves : hint_range(0, 15) = 2;
-uniform float world_noise_lod_distance : hint_range(0., 40000., 1.) = 7500.;
-uniform float world_noise_scale : hint_range(0.25, 20, 0.01) = 5.0;
-uniform float world_noise_height : hint_range(-1000., 1000., 0.1) = 32.0;
-uniform vec3 world_noise_offset = vec3(0.0);
-group_uniforms;
-varying vec2 world_noise_ddxy;
 
 
 // Varyings & Types
@@ -189,20 +147,6 @@ float interpolated_height(vec2 pos) {
 	return h;
 }
 
-vec3 get_displacement(vec2 pos, float scale) {
-	float s = floor(log2(1.0 / (scale * _vertex_density)));
-	scale = pow(2.0, s) * 0.5;
-	vec2 d_uv = (scale * pos - round(_target_pos.xz * _vertex_density * scale)) / (_mesh_size * 2.0) + 0.5;
-	d_uv.x += s - 1.;
-	d_uv.x /= log2(_subdiv);
-	highp vec3 disp = vec3(0.);
-	if (all(greaterThanEqual(d_uv, vec2(0.0))) && all(lessThanEqual(d_uv, vec2(1.0)))) {
-		disp = textureLod(_displacement_buffer, d_uv, 0.).rgb * 2.0 - 1.0;
-		disp *= _displacement_scale;
-	}
-	return disp;
-}
-
 // Takes in UV2 region space coordinates, returns 1.0 or 0.0 if a region is present or not.
 float check_region(const vec2 uv2) {
 	ivec2 pos = ivec2(floor(uv2)) + (_region_map_size / 2);
@@ -227,89 +171,6 @@ float get_region_blend(vec2 uv2) {
 	float blend = mix(mix(d, c, w.x), mix(a, b, w.x), w.y);
 	return (1.0 - blend) * 2.0;
 }
-
-// World Noise Functions Start
-
-// Takes in UV2 region space coordinates, returns a blend value (0 - 1 range) between empty, and valid regions
-float get_noise_region_blend(vec2 uv2) {
-	uv2 -= 0.5011; // correct for floating point error
-	const vec2 offset = vec2(0.0, 1.0);
-	float a = check_region(uv2 + offset.xy);
-	float b = check_region(uv2 + offset.yy);
-	float c = check_region(uv2 + offset.yx);
-	float d = check_region(uv2 + offset.xx);
-	vec2 w = smoothstep(vec2(0.0), vec2(1.0), fract(uv2));
-	float blend = mix(mix(d, c, w.x), mix(a, b, w.x), w.y);
-    return 1.0 - blend * 2.0;
-}
-
-float hashf(float f) {
-	return fract(sin(f) * 1e4);
-}
-
-float hashv2(vec2 v) {
-	return fract(1e4 * sin(fma(17.0, v.x, v.y * 0.1)) * (0.1 + abs(sin(fma(v.y, 13.0, v.x)))));
-}
-
-// https://iquilezles.org/articles/morenoise/
-vec3 noise2D(vec2 x) {
-    vec2 f = fract(x);
-    // Quintic Hermine Curve.  Similar to SmoothStep()
-	vec2 f2 = f * f, f3 = f2 * f, s = f - 1.0, s2 = s * s;
-	vec2 u = f3 * fma(vec2(6.0), f2, fma(vec2(-15.0), f, vec2(10.0)));
-	vec2 du = 30.0 * f2 * s2;
-
-    vec2 p = floor(x);
-
-	// Four corners in 2D of a tile
-	float a = hashv2( p+vec2(0,0) );
-    float b = hashv2( p+vec2(1,0) );
-    float c = hashv2( p+vec2(0,1) );
-    float d = hashv2( p+vec2(1,1) );
-
-    // Mix 4 corner percentages
-    float k0 =   a;
-    float k1 =   b - a;
-    float k2 =   c - a;
-    float k3 =   d - (b + k2);
-	return vec3(fma(k2, u.y, fma(u.x, fma(k3, u.y, k1), k0)),
-		 du * fma(vec2(k3), u.yx, vec2(k1, k2)));
-}
-
-float world_noise(vec2 p) {
-    float a = 0.0;
-    float b = 1.0;
-    vec2  d = vec2(0.0);
-
-    int octaves = int( clamp(
-		float(world_noise_max_octaves) - floor(v_vertex_xz_dist/(world_noise_lod_distance)),
-		float(world_noise_min_octaves), float(world_noise_max_octaves))
-	);
-	
-    for( int i=0; i < octaves; i++ ) {
-        vec3 n = noise2D(p);
-        d += n.yz;
-        a += b * n.x / (1.0 + dot(d,d));
-        b *= 0.5;
-        p = mat2( vec2(0.8, -0.6), vec2(0.6, 0.8) ) * p * 2.0;
-    }
-    return a;
-}
-
-float get_noise_height(const vec2 uv) {
-	float weight = get_noise_region_blend(uv);
-	// Only calculate world noise when it would be visible.
-    if (weight <= 0.5) {
-		return 0.0;
-	}
-	//TODO: Offset/scale UVs are semi-dependent upon region size 1024. Base on v_vertex.xz instead
-	float noise = world_noise((uv + world_noise_offset.xz * 1024. / _region_size) * world_noise_scale * _region_size / 1024. * .1) *
-            world_noise_height * 10. + world_noise_offset.y * 100.;
-    weight = smoothstep(0.5, 1.0, weight);
-    return mix(0.0, noise, weight);
-}
-
-// World Noise Functions End
 
 
 void vertex() {
@@ -372,23 +233,6 @@ void vertex() {
 		// Apply background ground level and region blend, dont include texel offset
 		h = mix(h, ground_level, smoothstep(0.0, 1.0, get_region_blend(UV * _region_texel_size)));
 
-		// World Noise
-		if (_background_mode == 2u) {
-			vec2 nuv_a = start_pos * _region_texel_size;
-			vec2 nuv_b = end_pos * _region_texel_size;
-			float nh = mix(get_noise_height(nuv_a), get_noise_height(nuv_b), vertex_lerp);
-			float nu = mix(get_noise_height(nuv_a + vec2(_region_texel_size, 0.0)),
-				get_noise_height(nuv_b + vec2(_region_texel_size, 0.0)), vertex_lerp);
-			float nv = mix(get_noise_height(nuv_a + vec2(0.0, _region_texel_size)),
-				get_noise_height(nuv_b + vec2(0.0, _region_texel_size)), vertex_lerp);
-			world_noise_ddxy = vec2(nh - nu, nh - nv);
-			h += nh;
-		}
-
-		if (!(CAMERA_VISIBLE_LAYERS == _mouse_layer)) {
-			displacement = mix(get_displacement(start_pos, scale), get_displacement(end_pos, scale * 2.0), vertex_lerp);
-		}
-
 		v_vertex.y = h;
 	}
 
@@ -412,6 +256,130 @@ vec2 rotate_vec2(const vec2 v, const vec2 cs) {
 	return vec2(fma(cs.x, v.x,  cs.y * v.y), fma(cs.x, v.y, -cs.y * v.x));
 }
 
+// 2-4 lookups ( 2-6 with dual scaling )
+void accumulate_material(vec3 base_ddx, vec3 base_ddy, const mat3 TNB, const float weight, const ivec3 index,
+			const uint control, const vec2 texture_weight, const ivec2 texture_id, const vec3 i_normal,
+			float h, inout material mat) {
+
+	// Applying scaling before projection reduces the number of multiplys ops required.
+	vec3 i_vertex = v_vertex;
+
+	// Control map scale
+	float control_scale = DECODE_SCALE(control);
+	base_ddx *= control_scale;
+	base_ddy *= control_scale;
+	i_vertex *= control_scale;
+	h *= control_scale;
+
+	// Index position for detiling.
+	vec2 i_pos = fma(_region_locations[index.z], vec2(_region_size), vec2(index.xy));
+	i_pos *= _vertex_spacing * control_scale;
+
+	// Projection
+	vec2 i_uv = i_vertex.xz;
+	vec4 i_dd = vec4(base_ddx.xz, base_ddy.xz);
+	mat2 p_align = mat2(1.);
+
+	// Control map rotation. Must be applied seperatley from detiling to maintain UV continuity.
+	float c_angle = DECODE_ANGLE(control);
+	vec2 c_cs_angle = vec2(cos(c_angle), sin(c_angle));
+	i_uv = rotate_vec2(i_uv, c_cs_angle);
+	i_pos = rotate_vec2(i_pos, c_cs_angle);
+
+	// Blend adjustment of Higher ID from Lower ID normal map in world space.
+	float world_normal = 1.;
+	// mat3 multiply, reduced to 2x fma and 1x mult.
+	#define FAST_WORLD_NORMAL(n) fma(TNB[0], vec3(n.x), fma(TNB[2], vec3(n.z), TNB[1] * vec3(n.y)))
+	
+	float blend = DECODE_BLEND(control); // only used for branching.
+	float sharpness = fma(60., blend_sharpness, 4.);
+
+
+	// 1st Texture Asset ID
+	if (blend < 1.0 
+			) {
+		int id = texture_id[0];
+		float id_w = texture_weight[0];
+		float id_scale = _texture_uv_scale_array[id];
+		vec4 id_dd = i_dd * id_scale;
+
+		// Detiling and Control map rotation
+		vec2 uv_center = floor(fma(i_pos, vec2(id_scale), vec2(0.5)));
+		vec2 id_detile = fma(random(uv_center), 2.0, -1.0) * _texture_detile_array[id] * TAU;
+		vec2 id_cs_angle = vec2(cos(id_detile.x), sin(id_detile.x));
+		// Apply UV rotation and shift around pivot.
+		vec2 id_uv = rotate_vec2(fma(i_uv, vec2(id_scale), -uv_center), id_cs_angle) + uv_center + id_detile.y - 0.5;
+		// Manual transpose to rotate derivatives and normals counter to uv rotation whilst also
+		// including control map rotation. avoids extra matrix op, and sin/cos calls.
+		id_cs_angle = vec2(
+			fma(id_cs_angle.x, c_cs_angle.x, -id_cs_angle.y * c_cs_angle.y),
+			fma(id_cs_angle.y, c_cs_angle.x, id_cs_angle.x * c_cs_angle.y));
+		// Align derivatives for correct anisotropic filtering
+		id_dd.xy = rotate_vec2(id_dd.xy, id_cs_angle);
+		id_dd.zw = rotate_vec2(id_dd.zw, id_cs_angle);
+
+		vec4 nrm = textureGrad(_texture_array_normal, vec3(id_uv, float(id)), id_dd.xy, id_dd.zw);
+		nrm.a = clamp(nrm.a + _texture_roughness_mod_array[id], 0., 1.);
+		// Unpack and rotate normal map.
+		nrm.xyz = fma(nrm.xzy, vec3(2.0), vec3(-1.0));
+		float ao = length(nrm.xyz) * 2.0 - 1.0;
+		nrm.xyz = normalize(nrm.xyz);
+		nrm.xz = rotate_vec2(nrm.xz, id_cs_angle) * p_align;
+
+		world_normal = FAST_WORLD_NORMAL(nrm).y;
+
+		float id_weight = exp2(sharpness * log2(weight + id_w)) * weight;
+		mat.normal_rough = fma(nrm, vec4(id_weight), mat.normal_rough);
+		mat.normal_map_depth = fma(_texture_normal_depth_array[id], id_weight, mat.normal_map_depth);
+		mat.ao = fma(ao, id_weight, mat.ao);
+		mat.ao_affect = fma(_texture_ao_affect_array[id], id_weight, mat.ao_affect);
+		mat.total_weight += id_weight;
+	}
+
+	// 2nd Texture Asset ID
+	if (blend > 0.0 && texture_id[1] != texture_id[0]
+		) {
+		int id = texture_id[1];
+		float id_w = texture_weight[1];
+		float id_scale = _texture_uv_scale_array[id];
+		vec4 id_dd = i_dd * id_scale;
+
+		// Detiling and Control map rotation
+		vec2 uv_center = floor(fma(i_pos, vec2(id_scale), vec2(0.5)));
+		vec2 id_detile = fma(random(uv_center), 2.0, -1.0) * _texture_detile_array[id] * TAU;
+		vec2 id_cs_angle = vec2(cos(id_detile.x), sin(id_detile.x));
+		// Apply UV rotation and shift around pivot.
+		vec2 id_uv = rotate_vec2(fma(i_uv, vec2(id_scale), -uv_center), id_cs_angle) + uv_center + id_detile.y - 0.5;
+		// Manual transpose to rotate derivatives and normals counter to uv rotation whilst also
+		// including control map rotation. avoids extra matrix op, and sin/cos calls.
+		id_cs_angle = vec2(
+			fma(id_cs_angle.x, c_cs_angle.x, -id_cs_angle.y * c_cs_angle.y),
+			fma(id_cs_angle.y, c_cs_angle.x, id_cs_angle.x * c_cs_angle.y));
+		// Align derivatives for correct anisotropic filtering
+		id_dd.xy = rotate_vec2(id_dd.xy, id_cs_angle);
+		id_dd.zw = rotate_vec2(id_dd.zw, id_cs_angle);
+
+		vec4 alb = textureGrad(_texture_array_albedo, vec3(id_uv, float(id)), id_dd.xy, id_dd.zw);
+		vec4 nrm = textureGrad(_texture_array_normal, vec3(id_uv, float(id)), id_dd.xy, id_dd.zw);
+		alb.rgb *= _texture_color_array[id].rgb;
+		nrm.a = clamp(nrm.a + _texture_roughness_mod_array[id], 0., 1.);
+		// Unpack and rotate normal map.
+		nrm.xyz = fma(nrm.xzy, vec3(2.0), vec3(-1.0));
+		float ao = length(nrm.xyz) * 2.0 - 1.0;
+		ao = mix(ao * ao * _texture_ao_strength_array[id] + 1.0 - _texture_ao_strength_array[id], 1.0, alb.a * alb.a);
+		nrm.xyz = normalize(nrm.xyz);
+		nrm.xz = rotate_vec2(nrm.xz, id_cs_angle) * p_align;
+
+		float id_weight = exp2(sharpness * log2(weight + id_w + alb.a * clamp(world_normal, 0., 1.))) * weight;
+		mat.albedo_height = fma(alb, vec4(id_weight), mat.albedo_height);
+		mat.normal_rough = fma(nrm, vec4(id_weight), mat.normal_rough);
+		mat.normal_map_depth = fma(_texture_normal_depth_array[id], id_weight, mat.normal_map_depth);
+		mat.ao = fma(ao, id_weight, mat.ao);
+		mat.ao_affect = fma(_texture_ao_affect_array[id], id_weight, mat.ao_affect);
+		mat.total_weight += id_weight;
+	}
+}
+
 float get_height(vec2 index_id, vec2 offset) {
 	float height = texelFetch(_height_maps, get_index_coord(index_id + offset), 0).r;
 	if (_background_mode != 0u) {
@@ -427,11 +395,23 @@ void fragment() {
 	// Recover UVs
 	vec2 uv = UV;
 	vec2 uv2 = UV2;
+	vec3 base_ddx = dFdxCoarse(v_vertex);
+	vec3 base_ddy = dFdyCoarse(v_vertex);
+	float bias = mix(mipmap_bias,
+		depth_blur + 1.,
+		smoothstep(0.0, 1.0, (v_vertex_xz_dist - bias_distance) * DIV_1024));
 	
 	// Lookup offsets, ID and blend weight
 	vec3 region_uv = get_index_uv(uv2);
 
-	vec4 rvt_region_tex = texture(rvt_albedo, region_uv);
-	ALBEDO = rvt_region_tex.rgb;
+	// Terrain normals
+	// Allows for additional derivatives, eg world background, brush previews etc
+	float u = 0.0;
+	float v = 0.0;
 
+	// Apply PBR
+	vec4 micro_alb = texture(_texture_array_albedo, vec3(region_uv.xy * 10.0, 0));
+	vec4 sec_alb = texture(_texture_array_albedo, vec3(region_uv.xy * 10.0, 1));
+	vec4 alb = texture(rvt_albedo, region_uv);
+	ALBEDO = mix(micro_alb, sec_alb, alb.r).rgb;
 }

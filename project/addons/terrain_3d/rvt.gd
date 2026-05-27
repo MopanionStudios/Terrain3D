@@ -1,4 +1,3 @@
-@tool
 extends Node3D
 
 var compute_helper := ComputeHelper.new()
@@ -27,6 +26,14 @@ func _init() -> void:
 	
 	shader = rd.shader_create_from_spirv(shader_spirv)
 	pipeline = rd.compute_pipeline_create(shader)
+	var sampler_settings := RDSamplerState.new()
+	sampler_settings.min_filter = RenderingDevice.SAMPLER_FILTER_LINEAR
+	sampler_settings.mag_filter = RenderingDevice.SAMPLER_FILTER_LINEAR
+	sampler_settings.mip_filter = RenderingDevice.SAMPLER_FILTER_LINEAR
+	sampler_settings.repeat_u = RenderingDevice.SAMPLER_REPEAT_MODE_REPEAT
+	sampler_settings.repeat_v = RenderingDevice.SAMPLER_REPEAT_MODE_REPEAT
+	sampler_settings.repeat_w = RenderingDevice.SAMPLER_REPEAT_MODE_REPEAT
+	sampler_state = rd.sampler_create(sampler_settings)
 
 
 func _ready() -> void:
@@ -59,15 +66,14 @@ func _prepare_buffers(region : Terrain3DRegion):
 	terrain_params.resize(32)
 	terrain_params.encode_float(0, region_size)
 	terrain_params.encode_float(4, Terrain.vertex_spacing)
-	terrain_params.encode_float(16, float(region_location.x))
-	terrain_params.encode_float(20, float(region_location.y))
-	terrain_params.encode_s32(24, region_id)
-	terrain_params.encode_s32(28, terrain_data.REGION_MAP_SIZE)
+	terrain_params.encode_float(8, float(region_location.x))
+	terrain_params.encode_float(12, float(region_location.y))
+	terrain_params.encode_s32(16, region_id)
+	terrain_params.encode_s32(20, terrain_data.REGION_MAP_SIZE)
 	
 	param_buffer = rd.uniform_buffer_create(terrain_params.size(), terrain_params)
-	
+
 	# uv scale buffer
-	
 	if uv_scale_buffer.is_valid():
 		rd.free_rid(uv_scale_buffer)
 	
@@ -92,26 +98,26 @@ func _bake_region(region : Terrain3DRegion) -> void:
 	# create baked albedo map for this region
 	var layer_rid := rd.texture_create_shared_from_slice(RDTextureView.new(), rvt_array_rid, terrain_data.get_region_id(region.location), 0)
 	var rvt_uniform = compute_helper._create_uniform(0, layer_rid, RenderingDevice.UNIFORM_TYPE_IMAGE)
-	
+
 	var param_buffer_uniform = compute_helper._create_uniform(0, param_buffer, RenderingDevice.UNIFORM_TYPE_UNIFORM_BUFFER)
 	var uv_buffer_uniform = compute_helper._create_uniform(1, uv_scale_buffer, RenderingDevice.UNIFORM_TYPE_STORAGE_BUFFER)
-	
+
 	var set0 = compute_helper._create_set(rd, shader, 0, [rvt_uniform])
 	var set1 = compute_helper._create_set(rd, shader, 1, [albedo_uniform, control_uniform])
 	var set2 = compute_helper._create_set(rd, shader, 2, [param_buffer_uniform, uv_buffer_uniform])
-	
-	compute_helper.compile_compute(rd, [set0, set1, set2], pipeline, Vector2i(Terrain.region_size, Terrain.region_size))
-	
+
+	compute_helper.compile_compute(rd, [set0, set1, set2], pipeline, Vector2i(1024, 1024))
+
 	rd.free_rid(layer_rid)
 
 func _init_rvt_regions() -> void:
 	var max_regions := terrain_data.get_region_count()
-	
+
 	var fmt := RDTextureFormat.new()
 	fmt.texture_type = RenderingDevice.TEXTURE_TYPE_2D_ARRAY
 	fmt.format = RenderingDevice.DATA_FORMAT_R16G16B16A16_SFLOAT
-	fmt.width = Terrain.region_size
-	fmt.height = Terrain.region_size
+	fmt.width = 1024
+	fmt.height = 1024
 	fmt.array_layers = max_regions
 	fmt.usage_bits = (RenderingDevice.TEXTURE_USAGE_STORAGE_BIT | RenderingDevice.TEXTURE_USAGE_SAMPLING_BIT | RenderingDevice.TEXTURE_USAGE_CAN_COPY_FROM_BIT)
 	
