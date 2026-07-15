@@ -588,13 +588,13 @@ void fragment() {
 	
 	// Apply PBR
 	ALBEDO = mat.albedo_height.rgb * color_map.rgb;
-	//ROUGHNESS = roughness;
-	//SPECULAR = 1. - mat.normal_rough.a;
-	//// Repack final normal map value.
-	//NORMAL_MAP = fma(normalize(mat.normal_rough.xzy), vec3(0.5), vec3(0.5));
-	//NORMAL_MAP_DEPTH = mat.normal_map_depth * distant_normal_amplifier;
-	//AO = clamp(mat.ao, 0., 1.);
-	//AO_LIGHT_AFFECT = mat.ao_affect;
+	ROUGHNESS = roughness;
+	SPECULAR = 1. - mat.normal_rough.a;
+	// Repack final normal map value.
+	NORMAL_MAP = fma(normalize(mat.normal_rough.xzy), vec3(0.5), vec3(0.5));
+	NORMAL_MAP_DEPTH = mat.normal_map_depth * distant_normal_amplifier;
+	AO = clamp(mat.ao, 0., 1.);
+	AO_LIGHT_AFFECT = mat.ao_affect;
 
 
 }

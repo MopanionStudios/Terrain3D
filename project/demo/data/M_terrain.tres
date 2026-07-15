@@ -12,7 +12,8 @@ _shader_parameters = {
 &"ground_level": -20.0,
 &"mipmap_bias": 1.0,
 &"region_blend": 0.25,
-&"rvt_albedo": null,
+&"rvt_region_albedo": null,
+&"rvt_region_normal": null,
 &"shader_uniforms": null,
 &"shader_uniforms::general": null,
 &"shader_uniforms::mipmaps": null

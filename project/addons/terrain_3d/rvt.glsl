@@ -6,10 +6,12 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 #define DIV_255 0.0039215686
 
-layout(rgba16, set = 0, binding = 0) uniform writeonly image2D blended_albedo;
+layout(rgba8, set = 0, binding = 0) uniform writeonly image2D blended_albedo;
+layout(rgba8, set = 0, binding = 1) uniform writeonly image2D blended_normal;
 
 layout(set = 1, binding = 0) uniform sampler2DArray albedo_array;
 layout(set = 1, binding = 1) uniform sampler2DArray controlmap_array;
+layout(set = 1, binding = 2) uniform sampler2DArray normal_array;
 
 layout(set = 2, binding = 0) uniform TerrainParams {
     float region_size;
@@ -35,7 +37,7 @@ void main() {
 	ivec2 control_size = textureSize(controlmap_array, 0).xy;
 	ivec2 control_coord = ivec2(uv * vec2(control_size));
 
-    vec4 control_map = texelFetch(controlmap_array, ivec3(control_coord, terrain_params.layer_index), 0);
+    vec4 control_map = textureLod(controlmap_array, vec3(uv, float(terrain_params.layer_index)), 0.0);
     uint control = floatBitsToUint(control_map.r);
 
     int base_id = int(control >> 27u & 0x1Fu);
@@ -43,16 +45,24 @@ void main() {
     float blend = float(control >> 14u & 0xFFu) * DIV_255;
 
     ivec2 base_alb_size = textureSize(albedo_array, 0).xy;
-    vec2 alb_uv = vec2(ssC) / vec2(base_alb_size);
-    vec2 base_uv = alb_uv * uv_scale_buffer.uv_scale_array[base_id];
+    vec2 tex_uv = vec2(ssC) / vec2(base_alb_size);
+    vec2 base_uv = tex_uv * uv_scale_buffer.uv_scale_array[base_id];
 
     vec4 base_albedo = textureLod(albedo_array, vec3(base_uv, float(base_id)), 0.0);
+    vec4 base_normal = textureLod(normal_array,vec3(base_uv, float(base_id)), 0.0);
+
     vec4 final_albedo = base_albedo;
+    vec4 final_normal = base_normal;
+
     if (blend > 0.0) {
-        vec2 overlay_uv = alb_uv * uv_scale_buffer.uv_scale_array[overlay_id];
+        vec2 overlay_uv = tex_uv * uv_scale_buffer.uv_scale_array[overlay_id];
+
+        vec4 overlay_normal = textureLod(normal_array, vec3(overlay_uv, float(overlay_id)), 0.0);
         vec4 overlay_albedo = textureLod(albedo_array, vec3(overlay_uv, float(overlay_id)), 0.0);
         final_albedo = mix(base_albedo, overlay_albedo, blend);
+        final_normal = mix(base_normal, overlay_normal, blend);
     }
 
-    imageStore(blended_albedo, ssC, vec4(final_albedo.rgb, 1.0));
+    imageStore(blended_albedo, ssC, final_albedo);
+    imageStore(blended_normal, ssC, final_normal);
 }
