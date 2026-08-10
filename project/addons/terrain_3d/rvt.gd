@@ -1,6 +1,8 @@
+@tool
 extends Node3D
 
 var compute_helper := ComputeHelper.new()
+@export_tool_button("Rebake Terrain", "Bake") var rebake_action = _init_rvt_regions
 @export var Terrain : Terrain3D
 @export_enum("512:512", "1024:1024", "2048:2048", "4096:4096", "8192:8192") var resolution : int = 1024
 var terrain_data : Terrain3DData

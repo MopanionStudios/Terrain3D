@@ -34,6 +34,6 @@ metadata/_edit_lock_ = true
 [node name="RVT" type="Node3D" parent="Terrain3D" unique_id=977128196 node_paths=PackedStringArray("Terrain")]
 script = ExtResource("10_fhs52")
 Terrain = NodePath("..")
-resolution = 4096
+resolution = 2048
 
 [editable path="Environment"]

@@ -2,6 +2,10 @@
 
 [ext_resource type="Shader" uid="uid://vmy6duwngfkt" path="res://new_rvt.gdshader" id="1_bqowf"]
 
+[sub_resource type="Texture2DArrayRD" id="Texture2DArrayRD_bqowf"]
+
+[sub_resource type="Texture2DArrayRD" id="Texture2DArrayRD_hxs0i"]
+
 [resource]
 _shader_parameters = {
 &"bias_distance": 512.0,
@@ -12,8 +16,8 @@ _shader_parameters = {
 &"ground_level": -20.0,
 &"mipmap_bias": 1.0,
 &"region_blend": 0.25,
-&"rvt_region_albedo": null,
-&"rvt_region_normal": null,
+&"rvt_region_albedo": SubResource("Texture2DArrayRD_bqowf"),
+&"rvt_region_normal": SubResource("Texture2DArrayRD_hxs0i"),
 &"shader_uniforms": null,
 &"shader_uniforms::general": null,
 &"shader_uniforms::mipmaps": null
