@@ -4,7 +4,7 @@ extends Node3D
 var compute_helper := ComputeHelper.new()
 @export_tool_button("Rebake Terrain", "Bake") var rebake_action = _init_rvt_regions
 @export var Terrain : Terrain3D
-@export_enum("512:512", "1024:1024", "2048:2048", "4096:4096", "8192:8192") var resolution : int = 1024
+@export_enum("512:512", "1024:1024", "2048:2048", "4096:4096", "8192:8192") var max_resolution : int = 4096
 var terrain_data : Terrain3DData
 
 # Compute shader variables
@@ -24,10 +24,23 @@ var mip_shader : RID
 var param_buffer : RID
 var uv_scale_buffer : RID
 
-var rvt_array_rid : RID
-var rvt_tex : Texture2DArrayRD
-var rvt_nor_array_rid : RID
-var rvt_nor_tex : Texture2DArrayRD
+var rvt_far_array_rid : RID
+var rvt_far_tex : Texture2DArrayRD
+var rvt_far_nor_array_rid : RID
+var rvt_far_nor_tex : Texture2DArrayRD
+
+var rvt_med_array_rid : RID
+var rvt_med_tex : Texture2DArrayRD
+var rvt_med_nor_array_rid : RID
+var rvt_med_nor_tex : Texture2DArrayRD
+
+var rvt_near_array_rid : RID
+var rvt_near_tex : Texture2DArrayRD
+var rvt_near_nor_array_rid : RID
+var rvt_near_nor_tex : Texture2DArrayRD
+
+var current_region_tex : Texture2DRD
+var current_region_tex_rid : RID
 
 func _init() -> void:
 	rd = RenderingServer.get_rendering_device()
@@ -39,15 +52,6 @@ func _init() -> void:
 	pipeline = rd.compute_pipeline_create(shader)
 	mip_shader = rd.shader_create_from_spirv(mip_shader_spirv)
 	mip_pipeline = rd.compute_pipeline_create(mip_shader)
-	
-	var sampler_settings := RDSamplerState.new()
-	sampler_settings.min_filter = RenderingDevice.SAMPLER_FILTER_LINEAR
-	sampler_settings.mag_filter = RenderingDevice.SAMPLER_FILTER_LINEAR
-	sampler_settings.mip_filter = RenderingDevice.SAMPLER_FILTER_LINEAR
-	sampler_settings.repeat_u = RenderingDevice.SAMPLER_REPEAT_MODE_REPEAT
-	sampler_settings.repeat_v = RenderingDevice.SAMPLER_REPEAT_MODE_REPEAT
-	sampler_settings.repeat_w = RenderingDevice.SAMPLER_REPEAT_MODE_REPEAT
-	sampler_state = rd.sampler_create(sampler_settings)
 
 
 func _gen_mipmaps(array_rid : RID, layer : int, size : int) -> void:
@@ -68,11 +72,24 @@ func _gen_mipmaps(array_rid : RID, layer : int, size : int) -> void:
 		var set1 = compute_helper._create_set(rd, mip_shader, 1, [src_uniform])
 		
 		compute_helper.compile_compute(rd, [set0, set1], mip_pipeline, Vector2i(dest_size, dest_size))
-		rd.free_rid(src_slice)
-		rd.free_rid(dest_slice)
 
 func _ready() -> void:
 	terrain_data = Terrain.data
+	
+	var filter : RenderingDevice.SamplerFilter
+	if Terrain.material.texture_filtering == 0 || Terrain.material.texture_filtering == 1:
+		filter = RenderingDevice.SamplerFilter.SAMPLER_FILTER_LINEAR
+	else:
+		filter = RenderingDevice.SamplerFilter.SAMPLER_FILTER_NEAREST
+	
+	var sampler_settings := RDSamplerState.new()
+	sampler_settings.min_filter = filter
+	sampler_settings.mag_filter = filter
+	sampler_settings.mip_filter = filter
+	sampler_settings.repeat_u = RenderingDevice.SAMPLER_REPEAT_MODE_REPEAT
+	sampler_settings.repeat_v = RenderingDevice.SAMPLER_REPEAT_MODE_REPEAT
+	sampler_settings.repeat_w = RenderingDevice.SAMPLER_REPEAT_MODE_REPEAT
+	sampler_state = rd.sampler_create(sampler_settings)
 	call_deferred("_init_rvt_regions")
 
 
@@ -119,7 +136,7 @@ func _prepare_buffers(region : Terrain3DRegion):
 	
 	uv_scale_buffer = rd.storage_buffer_create(uv_buffer.size(), uv_buffer)
 
-func _bake_region(region : Terrain3DRegion) -> void:
+func _bake_region_far(region : Terrain3DRegion) -> void:
 	_prepare_buffers(region)
 	
 	var region_id = terrain_data.get_region_id(region.location)
@@ -137,8 +154,8 @@ func _bake_region(region : Terrain3DRegion) -> void:
 	var nor_uniform = compute_helper._create_sampler(rd, sampler_state, 2, normal_maps)
 	
 	# create baked albedo map for this region
-	var alb_layer_rid := rd.texture_create_shared_from_slice(RDTextureView.new(), rvt_array_rid, region_id, 0)
-	var nor_layer_rid := rd.texture_create_shared_from_slice(RDTextureView.new(), rvt_nor_array_rid, region_id, 0)
+	var alb_layer_rid := rd.texture_create_shared_from_slice(RDTextureView.new(), rvt_far_array_rid, region_id, 0)
+	var nor_layer_rid := rd.texture_create_shared_from_slice(RDTextureView.new(), rvt_far_nor_array_rid, region_id, 0)
 	var rvt_alb_uniform = compute_helper._create_uniform(0, alb_layer_rid, RenderingDevice.UNIFORM_TYPE_IMAGE)
 	var rvt_nor_uniform = compute_helper._create_uniform(1, nor_layer_rid, RenderingDevice.UNIFORM_TYPE_IMAGE)
 
@@ -149,42 +166,115 @@ func _bake_region(region : Terrain3DRegion) -> void:
 	var set1 = compute_helper._create_set(rd, shader, 1, [albedo_uniform, control_uniform, nor_uniform])
 	var set2 = compute_helper._create_set(rd, shader, 2, [param_buffer_uniform, uv_buffer_uniform])
 
-	compute_helper.compile_compute(rd, [set0, set1, set2], pipeline, Vector2i(resolution, resolution))
+	compute_helper.compile_compute(rd, [set0, set1, set2], pipeline, Vector2i(max_resolution / 4, max_resolution / 4))
 
-	_gen_mipmaps(rvt_array_rid, region_id, resolution)
-	_gen_mipmaps(rvt_nor_array_rid, region_id, resolution)
+	_gen_mipmaps(rvt_far_array_rid, region_id, max_resolution / 4)
+	_gen_mipmaps(rvt_far_nor_array_rid, region_id, max_resolution / 4)
 
 	rd.free_rid(alb_layer_rid)
 	rd.free_rid(nor_layer_rid)
 
+
 func _init_rvt_regions() -> void:
+	_init_far_rvt_regions()
+	_init_med_rvt_regions()
+	_init_near_rvt_regions()
+
+
+func _init_far_rvt_regions() -> void:
 	var max_regions := terrain_data.get_region_count()
-	var mip_count := int(log(resolution) / log(2)) + 1
+	var mip_count := int(log(max_resolution / 4) / log(2)) + 1
 
 	var fmt := RDTextureFormat.new()
 	fmt.texture_type = RenderingDevice.TEXTURE_TYPE_2D_ARRAY
 	fmt.format = RenderingDevice.DATA_FORMAT_R8G8B8A8_UNORM
-	fmt.width = resolution
-	fmt.height = resolution
+	fmt.width = max_resolution
+	fmt.height = max_resolution
 	fmt.array_layers = max_regions
 	fmt.usage_bits = (RenderingDevice.TEXTURE_USAGE_STORAGE_BIT | RenderingDevice.TEXTURE_USAGE_SAMPLING_BIT | RenderingDevice.TEXTURE_USAGE_CAN_COPY_FROM_BIT)
 	fmt.mipmaps = mip_count
 
-	if rvt_array_rid.is_valid():
-		rd.free_rid(rvt_array_rid)
-	if rvt_nor_array_rid.is_valid():
-		rd.free_rid(rvt_nor_array_rid)
+	if rvt_far_array_rid.is_valid():
+		rd.free_rid(rvt_far_array_rid)
+	if rvt_far_nor_array_rid.is_valid():
+		rd.free_rid(rvt_far_nor_array_rid)
 
-	rvt_array_rid = rd.texture_create(fmt, RDTextureView.new())
-	rvt_nor_array_rid = rd.texture_create(fmt, RDTextureView.new())
+	rvt_far_array_rid = rd.texture_create(fmt, RDTextureView.new())
+	rvt_far_nor_array_rid = rd.texture_create(fmt, RDTextureView.new())
 
-	rvt_tex = Texture2DArrayRD.new()
-	rvt_tex.texture_rd_rid = rvt_array_rid
-	rvt_nor_tex = Texture2DArrayRD.new()
-	rvt_nor_tex.texture_rd_rid = rvt_nor_array_rid
+	rvt_far_tex = Texture2DArrayRD.new()
+	rvt_far_tex.texture_rd_rid = rvt_far_array_rid
+	rvt_far_nor_tex = Texture2DArrayRD.new()
+	rvt_far_nor_tex.texture_rd_rid = rvt_far_nor_array_rid
 	
-	Terrain.material.set_shader_param("rvt_region_albedo", rvt_tex)
-	Terrain.material.set_shader_param("rvt_region_normal", rvt_nor_tex)
+	Terrain.material.set_shader_param("rvt_far_region_albedo", rvt_far_tex)
+	Terrain.material.set_shader_param("rvt_far_region_normal", rvt_far_nor_tex)
 
 	for r in terrain_data.get_regions_active():
-		_bake_region(r)
+		_bake_region_far(r)
+
+
+func _init_med_rvt_regions() -> void:
+	var max_regions := 15
+	var mip_count := int(log(max_resolution / 2) / log(2)) + 1
+
+	var fmt := RDTextureFormat.new()
+	fmt.texture_type = RenderingDevice.TEXTURE_TYPE_2D_ARRAY
+	fmt.format = RenderingDevice.DATA_FORMAT_R8G8B8A8_UNORM
+	fmt.width = max_resolution
+	fmt.height = max_resolution
+	fmt.array_layers = max_regions
+	fmt.usage_bits = (RenderingDevice.TEXTURE_USAGE_STORAGE_BIT | RenderingDevice.TEXTURE_USAGE_SAMPLING_BIT | RenderingDevice.TEXTURE_USAGE_CAN_COPY_FROM_BIT)
+	fmt.mipmaps = mip_count
+
+	if rvt_far_array_rid.is_valid():
+		rd.free_rid(rvt_far_array_rid)
+	if rvt_far_nor_array_rid.is_valid():
+		rd.free_rid(rvt_far_nor_array_rid)
+
+	rvt_far_array_rid = rd.texture_create(fmt, RDTextureView.new())
+	rvt_far_nor_array_rid = rd.texture_create(fmt, RDTextureView.new())
+
+	rvt_far_tex = Texture2DArrayRD.new()
+	rvt_far_tex.texture_rd_rid = rvt_far_array_rid
+	rvt_far_nor_tex = Texture2DArrayRD.new()
+	rvt_far_nor_tex.texture_rd_rid = rvt_far_nor_array_rid
+	
+	Terrain.material.set_shader_param("rvt_region_albedo", rvt_far_tex)
+	Terrain.material.set_shader_param("rvt_region_normal", rvt_far_nor_tex)
+
+	for r in terrain_data.get_regions_active():
+		_bake_region_far(r)
+
+
+func _init_near_rvt_regions() -> void:
+	var max_regions := 5
+	var mip_count := int(log(max_resolution) / log(2)) + 1
+
+	var fmt := RDTextureFormat.new()
+	fmt.texture_type = RenderingDevice.TEXTURE_TYPE_2D_ARRAY
+	fmt.format = RenderingDevice.DATA_FORMAT_R8G8B8A8_UNORM
+	fmt.width = max_resolution
+	fmt.height = max_resolution
+	fmt.array_layers = max_regions
+	fmt.usage_bits = (RenderingDevice.TEXTURE_USAGE_STORAGE_BIT | RenderingDevice.TEXTURE_USAGE_SAMPLING_BIT | RenderingDevice.TEXTURE_USAGE_CAN_COPY_FROM_BIT)
+	fmt.mipmaps = mip_count
+
+	if rvt_far_array_rid.is_valid():
+		rd.free_rid(rvt_far_array_rid)
+	if rvt_far_nor_array_rid.is_valid():
+		rd.free_rid(rvt_far_nor_array_rid)
+
+	rvt_far_array_rid = rd.texture_create(fmt, RDTextureView.new())
+	rvt_far_nor_array_rid = rd.texture_create(fmt, RDTextureView.new())
+
+	rvt_far_tex = Texture2DArrayRD.new()
+	rvt_far_tex.texture_rd_rid = rvt_far_array_rid
+	rvt_far_nor_tex = Texture2DArrayRD.new()
+	rvt_far_nor_tex.texture_rd_rid = rvt_far_nor_array_rid
+	
+	Terrain.material.set_shader_param("rvt_region_albedo", rvt_far_tex)
+	Terrain.material.set_shader_param("rvt_region_normal", rvt_far_nor_tex)
+
+	for r in terrain_data.get_regions_active():
+		_bake_region_far(r)

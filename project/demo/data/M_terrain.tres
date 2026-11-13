@@ -2,26 +2,7 @@
 
 [ext_resource type="Shader" uid="uid://vmy6duwngfkt" path="res://new_rvt.gdshader" id="1_bqowf"]
 
-[sub_resource type="Texture2DArrayRD" id="Texture2DArrayRD_bqowf"]
-
-[sub_resource type="Texture2DArrayRD" id="Texture2DArrayRD_hxs0i"]
-
 [resource]
-_shader_parameters = {
-&"bias_distance": 512.0,
-&"blend_sharpness": 0.5,
-&"depth_blur": 0.0,
-&"distant_normal_scale": 2.0,
-&"flat_terrain_normals": false,
-&"ground_level": -20.0,
-&"mipmap_bias": 1.0,
-&"region_blend": 0.25,
-&"rvt_region_albedo": SubResource("Texture2DArrayRD_bqowf"),
-&"rvt_region_normal": SubResource("Texture2DArrayRD_hxs0i"),
-&"shader_uniforms": null,
-&"shader_uniforms::general": null,
-&"shader_uniforms::mipmaps": null
-}
 shader_override_enabled = true
 shader_override = ExtResource("1_bqowf")
 displacement_sharpness = 0.25

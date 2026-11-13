@@ -69,8 +69,12 @@ group_uniforms;
 
 // Public uniforms
 group_uniforms shader_uniforms.general;
-uniform highp sampler2DArray rvt_region_albedo : source_color, FILTER_METHOD, repeat_disable;
-uniform highp sampler2DArray rvt_region_normal : hint_normal, FILTER_METHOD, repeat_disable;
+uniform highp sampler2DArray rvt_far_region_albedo : source_color, FILTER_METHOD, repeat_enable;
+uniform highp sampler2DArray rvt_far_region_normal : hint_normal, FILTER_METHOD, repeat_enable;
+uniform highp sampler2DArray rvt_med_region_albedo : source_color, FILTER_METHOD, repeat_enable;
+uniform highp sampler2DArray rvt_med_region_normal : hint_normal, FILTER_METHOD, repeat_enable;
+uniform highp sampler2DArray rvt_near_region_albedo : source_color, FILTER_METHOD, repeat_enable;
+uniform highp sampler2DArray rvt_near_region_normal : hint_normal, FILTER_METHOD, repeat_enable;
 uniform float ground_level : hint_range(-1000., 1000.) = -20.0;
 uniform float region_blend : hint_range(.001, 1., 0.001) = 0.25;
 
@@ -361,14 +365,14 @@ void fragment() {
 		BINORMAL = mat3(VIEW_MATRIX) * w_binormal;
 	}
 
-	
 	vec4 region_albedo = textureLod(rvt_region_albedo, region_uv, region_mip);
 	vec4 region_normal = textureLod(rvt_region_normal, region_uv, region_mip);
 	vec4 color_map = region_uv.z > -1.0 ? textureLod(_color_maps, region_uv, region_mip) : COLOR_MAP_DEF;
 	// Apply PBR
 	ALBEDO = region_albedo.rgb * color_map.rgb;
 	AO = region_albedo.a;
-	NORMAL_MAP = region_normal.rgb;
+	NORMAL_MAP = region_normal.xyz;
 	NORMAL_MAP_DEPTH = 1.0;
 	ROUGHNESS = region_normal.a;
+	SPECULAR = 1. - region_normal.a;
 }
